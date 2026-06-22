@@ -1,2 +1,2 @@
 # cosmock
-Implementation of the formalism presented in 2411.04759
+Implementation of the formalism and algorithm presented in 2411.04759
