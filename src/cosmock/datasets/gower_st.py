@@ -8,7 +8,7 @@ import numpy as np
 from scipy.integrate import quad
 from scipy.interpolate import interp1d
 
-from .._optional import import_optional
+from ..util.optional import import_optional
 
 
 class GowerStConvergenceIA:
@@ -149,4 +149,3 @@ class GowerStConvergenceIA:
         """Return intrinsic-alignment maps in the configured tomographic bins."""
 
         return self.C_ia * np.array([self.create_field(weights, self.dens_arr) for weights in self.ia_weights])
-

@@ -4,9 +4,9 @@ import numpy as np
 import pytest
 
 import cosmock as cm
-from cosmock._optional import OptionalDependencyError
-from cosmock.generation import create_mock
-from cosmock.validation import MockValidationReport
+from cosmock.transforms import GPTGTransformSet
+from cosmock.util.optional import OptionalDependencyError
+from cosmock.util.validation import MockValidationReport
 
 
 def _toy_maps(n_bins=2, nside=2):
@@ -39,11 +39,20 @@ def test_core_import_exposes_public_api():
     assert cm.KappaCalibration is not None
     assert cm.MockModel is not None
     assert cm.MockValidationReport is MockValidationReport
+    assert set(cm.__all__) == {
+        "KappaCalibration",
+        "MockModel",
+        "MockValidationReport",
+        "SpectrumDiagnostics",
+    }
     assert "fit_transform" not in cm.__all__
     assert "target_cls_to_latent_cls" not in cm.__all__
     assert "create_mock" not in cm.__all__
     assert not hasattr(cm, "fit_gptg")
     assert not hasattr(cm, "generate_mocks")
+    assert not hasattr(cm, "create_mock")
+    assert not hasattr(cm, "Gn")
+    assert not hasattr(cm, "C_NG_to_C_G")
 
 
 def test_calibration_from_maps_with_supplied_spectra():
@@ -103,6 +112,9 @@ def test_mock_model_fit_stores_expected_fields():
     assert model.n_pix == cal.n_pix
     assert model.lmax == cal.cl_ng.shape[-1] - 1
     assert model.transform_params.shape == (2, 2)
+    assert model.transform_set is not None
+    assert model.transform_set.order == "2"
+    np.testing.assert_allclose(model.transform_set.transform_params, model.transform_params)
     assert model.cl_ng.shape == cal.cl_ng.shape
     assert model.cl_x.shape == cal.cl_ng.shape
     assert model.diagnostics()["cl_x"]["ok"]
@@ -183,7 +195,7 @@ def test_missing_healpy_error_for_implicit_spectrum_estimation(monkeypatch):
         cm.KappaCalibration.from_maps(_toy_maps(n_bins=1), nside=2, n_fit_bins=12)
 
 
-def test_create_mock_seeded_generation_when_healpy_is_available():
+def test_mock_model_sample_seeded_generation_when_healpy_is_available():
     pytest.importorskip("healpy")
 
     nside = 1
@@ -191,10 +203,20 @@ def test_create_mock_seeded_generation_when_healpy_is_available():
     cl_x = np.zeros((1, 1, lmax + 1), dtype=float)
     cl_x[0, 0] = [1e-20, 1e-20, 1e-3]
     transform_params = np.array([[0.2, 1.0]])
+    transform_set = GPTGTransformSet("2", transform_params)
+    model = cm.MockModel(
+        transform="gptg",
+        order="2",
+        transform_params=transform_params,
+        cl_ng=cl_x,
+        cl_x=cl_x,
+        nside=nside,
+        transform_set=transform_set,
+    )
 
-    mock_1 = create_mock(cl_x, transform_params, nside=nside, order=2, seed=123)
-    mock_2 = create_mock(cl_x, transform_params, nside=nside, order=2, seed=123)
+    mock_1 = model.sample(n_mocks=2, seed=123)
+    mock_2 = model.sample(n_mocks=2, seed=123)
 
-    assert mock_1.shape == (1, 12)
+    assert mock_1.shape == (2, 1, 12)
     assert np.all(np.isfinite(mock_1))
     np.testing.assert_allclose(mock_1, mock_2)

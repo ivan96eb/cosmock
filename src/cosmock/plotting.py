@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ._optional import import_optional
+from .util.optional import import_optional
 
 
 def _plt():
@@ -167,4 +167,3 @@ def ratio_ploter_comp(average_ratio, average_ratio_filt, N_bins, save_path=None,
     else:
         plt.show()
     plt.close()
-

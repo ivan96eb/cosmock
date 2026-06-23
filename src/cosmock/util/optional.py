@@ -25,4 +25,3 @@ def require_healpy(purpose: str = "This operation"):
     """Return healpy, or raise an optional dependency error."""
 
     return import_optional("healpy", extra="healpix", purpose=purpose)
-

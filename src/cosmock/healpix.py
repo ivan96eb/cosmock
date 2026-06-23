@@ -6,7 +6,7 @@ import math
 
 import numpy as np
 
-from ._optional import OptionalDependencyError
+from .util.optional import OptionalDependencyError
 
 try:
     import healpy as hp
@@ -188,4 +188,3 @@ def degrade_karmmalike(k):
     lmax = hp.Alm.getlmax(len(kelm))
     kappa = Alm2Map.apply(kelm, nside, lmax)
     return kappa.numpy()
-

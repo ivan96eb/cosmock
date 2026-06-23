@@ -9,10 +9,10 @@ import pytest
 from scipy.special import eval_legendre
 
 import cosmock as cm
-from cosmock.calibration import empirical_cdf, histogramer2d
 from cosmock.fitting import fit_gn, fit_gn_with_constraint, fit_transform, variance_from_Cl
 from cosmock.spectra import target_cls_to_latent_cls, var_pdf
-from cosmock.transforms import Gn
+from cosmock.transforms import GPTGTransform, GPTGTransformSet, gptg_transform
+from cosmock.util.statistics import empirical_cdf, histogramer2d
 
 
 def _toy_cls_for_variance(variance: float, lmax: int = 7):
@@ -92,7 +92,7 @@ def test_unconstrained_fit_recovers_known_transform_parameters(
     order, true_params, initial_params, atol
 ):
     x_data = np.linspace(-3.0, 3.0, 200)
-    y_data = Gn(x_data, order, true_params)
+    y_data = gptg_transform(x_data, order, true_params)
 
     fitted = fit_gn(x_data, y_data, order, initial_params=initial_params)
 
@@ -111,7 +111,7 @@ def test_constrained_fit_matches_variance_encoded_by_target_cls(
     order, true_params, initial_params
 ):
     x_data = np.linspace(-3.0, 3.0, 240)
-    y_data = Gn(x_data, order, true_params)
+    y_data = gptg_transform(x_data, order, true_params)
     target_variance = var_pdf(order, true_params, n_nodes=80)
     cl = _toy_cls_for_variance(target_variance)
 
@@ -142,12 +142,25 @@ def test_g2_target_to_latent_cls_round_trips_analytic_input_state():
     np.testing.assert_allclose(cl_x_recovered, cl_x_input, atol=5e-14, rtol=0)
 
 
+def test_gptg_transform_objects_match_function_kernel():
+    x_data = np.linspace(-2.0, 2.0, 30)
+    params = np.array([0.3, 0.9])
+    transform = GPTGTransform("2", params)
+    transform_set = GPTGTransformSet("2", params[np.newaxis, :])
+
+    np.testing.assert_allclose(transform.evaluate(x_data), gptg_transform(x_data, "2", params))
+    np.testing.assert_allclose(
+        transform_set.evaluate(x_data, bin_index=0),
+        gptg_transform(x_data, "2", params),
+    )
+
+
 @pytest.mark.parametrize("constrained", [False, True])
 def test_high_level_and_three_function_spine_match_for_pipeline_state(constrained):
     maps = np.vstack(
         [
-            Gn(np.linspace(-2.5, 2.5, 64), "2", [0.2, 0.6]),
-            Gn(np.linspace(-2.5, 2.5, 64), "2", [0.25, 0.7]),
+            gptg_transform(np.linspace(-2.5, 2.5, 64), "2", [0.2, 0.6]),
+            gptg_transform(np.linspace(-2.5, 2.5, 64), "2", [0.25, 0.7]),
         ]
     )
     cl_ng = _g2_forward_target_cls(
@@ -161,6 +174,7 @@ def test_high_level_and_three_function_spine_match_for_pipeline_state(constraine
     )
 
     transform_params = fit_transform(cal, order=2, constrained=constrained)
+    transform_set = cal.fit_transform(order=2, constrained=constrained)
     cl_x = target_cls_to_latent_cls(
         cal.cl_ng,
         transform_params,
@@ -168,6 +182,7 @@ def test_high_level_and_three_function_spine_match_for_pipeline_state(constraine
         n_jobs=1,
         quad_order=12,
     )
+    cl_x_from_object = transform_set.to_latent_spectra(n_jobs=1, quad_order=12)
     model = cm.MockModel.fit(
         cal,
         order=2,
@@ -176,7 +191,11 @@ def test_high_level_and_three_function_spine_match_for_pipeline_state(constraine
         quad_order=12,
     )
 
+    np.testing.assert_allclose(transform_set.transform_params, transform_params)
+    np.testing.assert_allclose(cl_x_from_object, cl_x)
     np.testing.assert_allclose(model.transform_params, transform_params)
+    assert model.transform_set is not None
+    np.testing.assert_allclose(model.transform_set.transform_params, transform_params)
     np.testing.assert_allclose(model.cl_x, cl_x)
     np.testing.assert_allclose(model.cl_ng, cal.cl_ng)
 
@@ -196,14 +215,17 @@ def test_core_math_matches_legacy_notebook_functions_when_available():
         params = np.array([0.2, 0.8])
         input_map = np.linspace(-1.0, 1.0, 40) ** 3
 
-        np.testing.assert_allclose(legacy_gn(x_data, "2", params), Gn(x_data, "2", params))
+        np.testing.assert_allclose(
+            legacy_gn(x_data, "2", params),
+            gptg_transform(x_data, "2", params),
+        )
 
         legacy_hist = legacy_histogramer2d(input_map, 8, (-3, 3))
         new_hist = histogramer2d(input_map, 8, (-3, 3))
         for legacy_arr, new_arr in zip(legacy_hist, new_hist):
             np.testing.assert_allclose(legacy_arr, new_arr)
 
-        y_data = Gn(x_data, "2", params)
+        y_data = gptg_transform(x_data, "2", params)
         initial_params = np.array([0.1, 0.9])
         np.testing.assert_allclose(
             legacy_fit_gn(x_data, y_data, "2", initial_params=initial_params),

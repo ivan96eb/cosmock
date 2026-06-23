@@ -13,4 +13,3 @@ def get_gh_nodes_weights(n_nodes: int):
     y_nodes = np.sqrt(2.0) * t
     y_weights = w / np.sqrt(np.pi)
     return y_nodes, y_weights
-

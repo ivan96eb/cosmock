@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 from scipy.optimize import minimize
 
-from .transforms import Gn
+from .transforms import gptg_transform
 
 
 def variance_from_Cl(Cl, ell_min=0):
@@ -25,7 +25,7 @@ def fit_gn(x_data, y_data, N, initial_params=None):
 
     def cost_function(params):
         try:
-            y_pred = Gn(x_data, N, params)
+            y_pred = gptg_transform(x_data, N, params)
             return np.sum((y_pred - y_data) ** 2)
         except Exception:
             return np.inf
@@ -54,7 +54,7 @@ def fit_gn_with_constraint(x_data, y_data, N, cls, initial_params=None):
     def cost_function(unconstrained_params):
         params = calc_constrained_params(unconstrained_params, var, N)
         try:
-            y_pred = Gn(x_data, N, params)
+            y_pred = gptg_transform(x_data, N, params)
             return np.sum((y_pred - y_data) ** 2)
         except Exception:
             return np.inf
@@ -103,4 +103,3 @@ def fit_transform(calibration, *, order=3, constrained: bool = True, initial_par
             transform_params[i] = fit_gn(x_data, y_data, order, initial_params=init_i)
 
     return transform_params
-

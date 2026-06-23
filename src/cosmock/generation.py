@@ -6,11 +6,9 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from ._optional import OptionalDependencyError, require_healpy
-from .fitting import fit_transform
-from .spectra import target_cls_to_latent_cls
-from .transforms import Gn
-from .validation import (
+from .transforms import GPTGTransformSet, gptg_transform
+from .util.optional import OptionalDependencyError, require_healpy
+from .util.validation import (
     MockValidationReport,
     spectrum_diagnostics,
     validate_cls,
@@ -34,7 +32,7 @@ def _validate_model_order(order) -> str:
     return order
 
 
-def eigvec_matmul(A, x, nbins):
+def _eigvec_matmul(A, x, nbins):
     """Multiply per-ell Cholesky factors into latent alm draws."""
 
     y = np.zeros_like(x)
@@ -44,7 +42,7 @@ def eigvec_matmul(A, x, nbins):
     return y
 
 
-def apply_cl(xlm, cl, gen_lmax, nbins):
+def _apply_cl(xlm, cl, gen_lmax, nbins):
     """Apply target latent spectra to unit Gaussian alm draws."""
 
     hp = require_healpy("Applying latent spectra to HEALPix alms")
@@ -55,13 +53,13 @@ def apply_cl(xlm, cl, gen_lmax, nbins):
     xlm_imag = xlm.imag
     L_arr = np.swapaxes(L[:, :, ell[ell > -1]], 0, 1)
 
-    ylm_real = eigvec_matmul(L_arr, xlm_real, nbins) / np.sqrt(2.0)
-    ylm_imag = eigvec_matmul(L_arr, xlm_imag, nbins) / np.sqrt(2.0)
+    ylm_real = _eigvec_matmul(L_arr, xlm_real, nbins) / np.sqrt(2.0)
+    ylm_imag = _eigvec_matmul(L_arr, xlm_imag, nbins) / np.sqrt(2.0)
     ylm_real[:, ell[emm == 0]] *= np.sqrt(2)
     return ylm_real + 1j * ylm_imag
 
 
-def get_xlm(xlm_real, xlm_imag, gen_lmax, nbins):
+def _get_xlm(xlm_real, xlm_imag, gen_lmax, nbins):
     """Build complex HEALPix alms from real and imaginary standard-normal draws."""
 
     hp = require_healpy("Creating HEALPix alms")
@@ -73,7 +71,7 @@ def get_xlm(xlm_real, xlm_imag, gen_lmax, nbins):
     return _xlm_real + 1j * _xlm_imag
 
 
-def generate_xlm(nbins, gen_lmax, *, seed=None, rng=None):
+def _generate_xlm(nbins, gen_lmax, *, seed=None, rng=None):
     """Draw unit Gaussian alms."""
 
     hp = require_healpy("Drawing HEALPix alms")
@@ -81,26 +79,26 @@ def generate_xlm(nbins, gen_lmax, *, seed=None, rng=None):
     ell, emm = hp.Alm.getlm(gen_lmax)
     xlm_real = rng.normal(size=(nbins, (ell > 1).sum()))
     xlm_imag = rng.normal(size=(nbins, ((ell > 1) & (emm > 0)).sum()))
-    xlm = get_xlm(xlm_real, xlm_imag, gen_lmax, nbins)
+    xlm = _get_xlm(xlm_real, xlm_imag, gen_lmax, nbins)
     return xlm, [xlm_real, xlm_imag]
 
 
-def generate_mock_y_lm(cl, nbins, gen_lmax, xlms=None, *, seed=None, rng=None):
+def _generate_mock_y_lm(cl, nbins, gen_lmax, xlms=None, *, seed=None, rng=None):
     """Generate latent Gaussian alms with target spectra."""
 
     if xlms is not None:
         xlm = xlms
         _xlm = None
     else:
-        xlm, _xlm = generate_xlm(nbins, gen_lmax, seed=seed, rng=rng)
-    return apply_cl(xlm, cl, gen_lmax, nbins), _xlm
+        xlm, _xlm = _generate_xlm(nbins, gen_lmax, seed=seed, rng=rng)
+    return _apply_cl(xlm, cl, gen_lmax, nbins), _xlm
 
 
-def get_y_maps(cl, nside, nbins, gen_lmax, xlms=None, *, seed=None, rng=None):
+def _get_y_maps(cl, nside, nbins, gen_lmax, xlms=None, *, seed=None, rng=None):
     """Generate latent Gaussian HEALPix maps."""
 
     hp = require_healpy("Generating latent HEALPix maps")
-    y_lm, xlm = generate_mock_y_lm(cl, nbins, gen_lmax, xlms, seed=seed, rng=rng)
+    y_lm, xlm = _generate_mock_y_lm(cl, nbins, gen_lmax, xlms, seed=seed, rng=rng)
     y_maps = []
     for i in range(nbins):
         y_map = hp.alm2map(np.ascontiguousarray(y_lm[i]), nside, lmax=gen_lmax, pol=False)
@@ -108,38 +106,38 @@ def get_y_maps(cl, nside, nbins, gen_lmax, xlms=None, *, seed=None, rng=None):
     return np.array(y_maps), xlm
 
 
-def get_kappa(y_maps, nbins, N, fitted_params):
+def _get_kappa(y_maps, nbins, N, fitted_params):
     """Apply the fitted transform to latent Gaussian maps."""
 
     k_list = []
     for i in range(nbins):
-        k_nf = Gn(y_maps[i], N, fitted_params[i])
+        k_nf = gptg_transform(y_maps[i], N, fitted_params[i])
         k_list.append(k_nf)
     return np.array(k_list)
 
 
-def get_kappa_pixwin(y_maps, nbins, N, fitted_params, nside, pixwinatell):
+def _get_kappa_pixwin(y_maps, nbins, N, fitted_params, nside, pixwinatell):
     """Apply the fitted transform and then a pixel window in harmonic space."""
 
     hp = require_healpy("Applying a HEALPix pixel window")
     k_list = []
     lmax = 2 * nside
     for i in range(nbins):
-        k_nf = Gn(y_maps[i], N, fitted_params[i])
+        k_nf = gptg_transform(y_maps[i], N, fitted_params[i])
         klm = hp.map2alm(k_nf, lmax=lmax)
         klm = klm * pixwinatell
         k_list.append(hp.alm2map(klm, nside))
     return np.array(k_list)
 
 
-def get_kappa_lm_pixwin(y_maps, nbins, N, fitted_params, nside, pixwinatell):
+def _get_kappa_lm_pixwin(y_maps, nbins, N, fitted_params, nside, pixwinatell):
     """Return pixel-windowed kappa alms."""
 
     hp = require_healpy("Applying a HEALPix pixel window")
     k_lm_list = []
     lmax = 2 * nside
     for i in range(nbins):
-        k_nf = Gn(y_maps[i], N, fitted_params[i])
+        k_nf = gptg_transform(y_maps[i], N, fitted_params[i])
         klm = hp.map2alm(k_nf, lmax=lmax)
         klm = klm * pixwinatell
         k_lm_list.append(klm)
@@ -154,7 +152,7 @@ def _pixwin_at_alm(pixwin, *, nside):
     return pixwin[ell_pixwin]
 
 
-def create_mock(
+def _create_mock(
     cl_x,
     transform_params,
     *,
@@ -177,15 +175,15 @@ def create_mock(
 
     rng = _rng(seed=seed, rng=rng)
     gen_lmax = cl_x.shape[-1] - 1
-    y_maps, _ = get_y_maps(cl_x, int(nside), nbins, gen_lmax, rng=rng)
+    y_maps, _ = _get_y_maps(cl_x, int(nside), nbins, gen_lmax, rng=rng)
 
     if apply_pixwin:
         if pixwin is None:
             raise ValueError("pixwin is required when apply_pixwin=True.")
         pixwinatell = _pixwin_at_alm(pixwin, nside=int(nside))
-        return get_kappa_pixwin(y_maps, nbins, str(order), params, int(nside), pixwinatell)
+        return _get_kappa_pixwin(y_maps, nbins, str(order), params, int(nside), pixwinatell)
 
-    return get_kappa(y_maps, nbins, str(order), params)
+    return _get_kappa(y_maps, nbins, str(order), params)
 
 
 @dataclass
@@ -200,6 +198,7 @@ class MockModel:
     nside: int | None
     pixwin: np.ndarray | None = None
     calibration: object | None = None
+    transform_set: GPTGTransformSet | None = None
     constrained: bool = True
     fit_settings: dict[str, object] | None = None
 
@@ -212,6 +211,7 @@ class MockModel:
         order=3,
         constrained: bool = True,
         n_jobs: int = 4,
+        initial_params=None,
         **spectra_kwargs,
     ) -> "MockModel":
         """Fit a mock model from a kappa calibration object."""
@@ -222,10 +222,13 @@ class MockModel:
         if calibration.cl_ng is None:
             raise ValueError("calibration.cl_ng is required to fit latent spectra.")
 
-        params = fit_transform(calibration, order=order, constrained=constrained)
-        cl_x = target_cls_to_latent_cls(
-            calibration.cl_ng, params, order=order, n_jobs=n_jobs, **spectra_kwargs
+        transform_set = calibration.fit_transform(
+            order=order,
+            constrained=constrained,
+            initial_params=initial_params,
         )
+        params = transform_set.transform_params
+        cl_x = transform_set.to_latent_spectra(n_jobs=n_jobs, **spectra_kwargs)
         latent_diag = spectrum_diagnostics(cl_x, n_bins=calibration.n_bins, name="cl_x")
         if not latent_diag.ok:
             raise ValueError(
@@ -243,12 +246,14 @@ class MockModel:
             nside=calibration.nside,
             pixwin=calibration.pixwin,
             calibration=calibration,
+            transform_set=transform_set,
             constrained=bool(constrained),
             fit_settings={
                 "transform": transform,
                 "order": order,
                 "constrained": bool(constrained),
                 "n_jobs": int(n_jobs),
+                "initial_params": initial_params is not None,
                 "spectra_kwargs": dict(spectra_kwargs),
             },
         )
@@ -280,7 +285,7 @@ class MockModel:
 
         if apply_pixwin is None:
             apply_pixwin = self.pixwin is not None
-        return generate_mocks(
+        return _generate_mocks(
             self,
             n_mocks=n_mocks,
             seed=seed,
@@ -394,13 +399,7 @@ class MockModel:
         )
 
 
-def fit_gptg(calibration, *, order=3, **kwargs) -> MockModel:
-    """Fit the default GPTG mock model from calibration data."""
-
-    return MockModel.fit(calibration, transform="gptg", order=order, **kwargs)
-
-
-def generate_mocks(model: MockModel, *, n_mocks: int = 1, seed=None, apply_pixwin=None):
+def _generate_mocks(model: MockModel, *, n_mocks: int = 1, seed=None, apply_pixwin=None):
     """Generate one or more mock kappa fields from a fitted model."""
 
     if n_mocks < 1:
@@ -410,7 +409,7 @@ def generate_mocks(model: MockModel, *, n_mocks: int = 1, seed=None, apply_pixwi
     rng = np.random.default_rng(seed)
     mocks = []
     for _ in range(int(n_mocks)):
-        mock = create_mock(
+        mock = _create_mock(
             model.cl_x,
             model.transform_params,
             nside=model.nside,

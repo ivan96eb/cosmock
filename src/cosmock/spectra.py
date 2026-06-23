@@ -6,9 +6,9 @@ import numpy as np
 from scipy.interpolate import interp1d
 from scipy.special import eval_legendre
 
-from .quadrature import get_gh_nodes_weights
-from .transforms import Gn
-from .validation import spectrum_diagnostics, validate_cls
+from .transforms import gptg_transform
+from .util.quadrature import get_gh_nodes_weights
+from .util.validation import spectrum_diagnostics, validate_cls
 
 try:
     from joblib import Parallel, delayed
@@ -33,8 +33,8 @@ def F_gauss_hermite_single(n, params_i, params_j, xi_g, n_nodes=40, precomputed=
     ystack = np.stack([yi.ravel(), yj.ravel()], axis=1)
     xstack = (L @ ystack.T).T
 
-    gn_i = Gn(xstack[:, 0], n, params_i)
-    gn_j = Gn(xstack[:, 1], n, params_j)
+    gn_i = gptg_transform(xstack[:, 0], n, params_i)
+    gn_j = gptg_transform(xstack[:, 1], n, params_j)
     return np.sum(gn_i * gn_j * (wi * wj).ravel())
 
 
@@ -154,7 +154,7 @@ def diagnose_cl_G(cl_G):
 def integrand(x, N, params):
     """Integrand used for transformed PDF variance."""
 
-    return Gn(x, N, params) ** 2
+    return gptg_transform(x, N, params) ** 2
 
 
 def var_pdf(N, params, n_nodes=10):

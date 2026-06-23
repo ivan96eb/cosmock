@@ -2,7 +2,7 @@
 
 from .calibration import KappaCalibration
 from .generation import MockModel
-from .validation import MockValidationReport, SpectrumDiagnostics
+from .util.validation import MockValidationReport, SpectrumDiagnostics
 
 __all__ = [
     "KappaCalibration",

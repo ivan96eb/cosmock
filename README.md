@@ -30,11 +30,11 @@ mocks = model.sample(n_mocks=100, seed=1234, apply_pixwin=True)
 report = model.validate(mocks)
 ```
 
-This object workflow is the supported public API. Lower-level numerical helpers
-remain available in implementation modules such as `cosmock.fitting`,
-`cosmock.spectra`, and `cosmock.generation` for advanced development and tests,
-but the user-facing story is calibration, model fitting, sampling, and
-validation through `MockModel`.
+This object workflow is the supported public API. User-facing operations that
+carry state live on domain objects such as `KappaCalibration` and `MockModel`.
+Stateless numerical helpers remain lower-level in implementation modules such
+as `cosmock.fitting`, `cosmock.spectra`, and `cosmock.util` for advanced
+development and tests.
 
 `MockModel.fit()` supports GPTG orders 2 and 3 as the tested v1 science path.
 `model.sample()` always returns mock maps with shape `(n_mocks, n_bins, n_pix)`.
@@ -74,6 +74,11 @@ Features that need those packages raise an error with the matching extra.
 
 If `cl_ng` is not supplied, `KappaCalibration.from_maps` estimates spectra with
 `healpy`, so install `cosmock[healpix]`.
+
+## Examples
+
+- `examples/cosmock_tutorial.ipynb`: runnable tutorial with synthetic kappa maps and plots.
+- `examples/basic_kappa_to_mocks.ipynb`: template for local data paths.
 
 ## Development
 
