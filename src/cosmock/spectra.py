@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import numpy as np
-from scipy.interpolate import interp1d
 from scipy.special import eval_legendre
 
 from .transforms import gptg_transform
@@ -17,35 +16,95 @@ except ImportError:
     delayed = None
 
 
+_LOW_ELL_IDENTITY_VALUE = 1e-20
+_SUPPORTED_SPECTRA_ORDERS = {"2", "3"}
+
+
+def _validate_spectra_order(order) -> str:
+    order = str(order)
+    if order not in _SUPPORTED_SPECTRA_ORDERS:
+        raise ValueError(f"cosmock v1 supports latent spectra conversion for GPTG orders 2 and 3; got {order}.")
+    return order
+
+
+def _force_low_ell_identity(cl, n_bins):
+    """Apply the v1 convention that ell=0,1 are tiny diagonal spectra."""
+
+    for ell in (0, 1):
+        if ell < cl.shape[-1]:
+            cl[:, :, ell] = _LOW_ELL_IDENTITY_VALUE * np.eye(n_bins)
+    return cl
+
+
+def _gauss_hermite_tensor_product(precomputed):
+    y_nodes, y_weights = precomputed
+    yi, yj = np.meshgrid(y_nodes, y_nodes, indexing="ij")
+    wi, wj = np.meshgrid(y_weights, y_weights, indexing="ij")
+    return yi.ravel(), yj.ravel(), (wi * wj).ravel()
+
+
+def _F_gauss_hermite_grid(n, params_i, params_j, xi_g_values, precomputed):
+    """Vectorized nonlinear correlation lookup on a grid of latent correlations."""
+
+    xi_g_values = np.asarray(xi_g_values, dtype=float)
+    if np.any((xi_g_values <= -1.0) | (xi_g_values >= 1.0)):
+        raise ValueError("xi_g lookup values must be strictly inside (-1, 1).")
+
+    yi, yj, weights = _gauss_hermite_tensor_product(precomputed)
+    sqrt_term = np.sqrt(np.maximum(1.0 - xi_g_values**2, 0.0))
+    xj = xi_g_values[:, np.newaxis] * yi[np.newaxis, :] + sqrt_term[:, np.newaxis] * yj
+
+    gn_i = gptg_transform(yi, n, params_i)
+    gn_j = gptg_transform(xj, n, params_j)
+    return np.sum(gn_j * (gn_i * weights)[np.newaxis, :], axis=1)
+
+
+def _invert_lookup_values(F_values, xi_g_grid, xi_NG):
+    F_values = np.asarray(F_values, dtype=float)
+    xi_g_grid = np.asarray(xi_g_grid, dtype=float)
+    if not np.all(np.isfinite(F_values)):
+        raise ValueError("G3 correlation lookup table contains non-finite values.")
+
+    diffs = np.diff(F_values)
+    increasing = bool(np.all(diffs > 0.0))
+    decreasing = bool(np.all(diffs < 0.0))
+    if not (increasing or decreasing):
+        raise ValueError("G3 correlation lookup table must be monotone to invert.")
+    if decreasing:
+        F_values = F_values[::-1]
+        xi_g_grid = xi_g_grid[::-1]
+
+    lower = float(F_values[0])
+    upper = float(F_values[-1])
+    margin = 100.0 * np.finfo(float).eps * max(1.0, abs(lower), abs(upper))
+    out_of_range = (xi_NG < lower - margin) | (xi_NG > upper + margin)
+    if np.any(out_of_range):
+        bad = np.asarray(xi_NG)[out_of_range]
+        raise ValueError(
+            "xi_NG is outside the G3 correlation lookup range; "
+            f"range=({lower:.6e}, {upper:.6e}), "
+            f"first offending value={float(bad.flat[0]):.6e}."
+        )
+
+    return np.interp(np.clip(xi_NG, lower, upper), F_values, xi_g_grid)
+
+
 def F_gauss_hermite_single(n, params_i, params_j, xi_g, n_nodes=40, precomputed=None):
     """Map latent Gaussian correlation to transformed-field correlation."""
 
     if precomputed is None:
-        y_nodes, y_weights = get_gh_nodes_weights(n_nodes)
-    else:
-        y_nodes, y_weights = precomputed
+        precomputed = get_gh_nodes_weights(n_nodes)
 
-    cov = np.array([[1.0, xi_g], [xi_g, 1.0]])
-    L = np.linalg.cholesky(cov)
-
-    yi, yj = np.meshgrid(y_nodes, y_nodes, indexing="ij")
-    wi, wj = np.meshgrid(y_weights, y_weights, indexing="ij")
-    ystack = np.stack([yi.ravel(), yj.ravel()], axis=1)
-    xstack = (L @ ystack.T).T
-
-    gn_i = gptg_transform(xstack[:, 0], n, params_i)
-    gn_j = gptg_transform(xstack[:, 1], n, params_j)
-    return np.sum(gn_i * gn_j * (wi * wj).ravel())
+    values = _F_gauss_hermite_grid(n, params_i, params_j, np.asarray([xi_g]), precomputed)
+    return float(values[0])
 
 
 def build_lookup_table(n, params_i, params_j, xi_g_values, pre, nnodes=20):
     """Build a lookup table for the nonlinear correlation mapping."""
 
-    results = []
-    for xi_g in xi_g_values:
-        result = F_gauss_hermite_single(n, params_i, params_j, xi_g, nnodes, pre)
-        results.append(result)
-    return np.array(results)
+    if pre is None:
+        pre = get_gh_nodes_weights(nnodes)
+    return _F_gauss_hermite_grid(n, params_i, params_j, xi_g_values, pre)
 
 
 def C_NG_to_C_G(
@@ -61,9 +120,11 @@ def C_NG_to_C_G(
 ):
     """Convert target non-Gaussian spectra to latent Gaussian spectra."""
 
-    N = str(N)
+    N = _validate_spectra_order(N)
     cl_NG = validate_cls(cl_NG, n_bins=N_bins, name="cl_NG")
     fitted_params = np.asarray(fitted_params, dtype=float)
+    if fitted_params.shape != (N_bins, int(N)):
+        raise ValueError(f"fitted_params must have shape ({N_bins}, {int(N)}) for G{N}.")
     cl_G = np.zeros_like(cl_NG)
 
     lmax_cl = cl_NG.shape[-1] - 1
@@ -72,6 +133,8 @@ def C_NG_to_C_G(
 
     ell_array = np.arange(lmax_cl + 1)
     P_ell = np.array([eval_legendre(ell, mu) for ell in ell_array])
+    forward_basis = ((2 * ell_array + 1)[:, np.newaxis] * P_ell) / (4 * np.pi)
+    inverse_basis = 2 * np.pi * (P_ell * w[np.newaxis, :])
     xi_g_grid = np.linspace(-0.99999, 0.99999, xig_grid_size)
     pre = get_gh_nodes_weights(Nnodes)
 
@@ -79,29 +142,36 @@ def C_NG_to_C_G(
         params_i = fitted_params[i]
         params_j = fitted_params[j]
 
-        ell_col = ell_array[:, np.newaxis]
-        arg = (2 * ell_col + 1) * P_ell * cl_NG[i, j, :, np.newaxis]
-        xi_NG = np.sum(arg, axis=0) / (4 * np.pi)
+        xi_NG = cl_NG[i, j] @ forward_basis
 
         if N == "2":
             alpha_i, beta_i = params_i
             alpha_j, beta_j = params_j
-            xi_G = np.log(1 + xi_NG / (beta_i * beta_j)) / (alpha_i * alpha_j)
+            denominator = beta_i * beta_j
+            alpha_product = alpha_i * alpha_j
+            if denominator == 0.0 or alpha_product == 0.0:
+                raise ValueError("G2 inverse requires non-zero alpha and beta products.")
+            log_arg = 1.0 + xi_NG / denominator
+            if np.any(log_arg <= 0.0):
+                bad = log_arg[log_arg <= 0.0]
+                raise ValueError(
+                    "G2 inverse log-domain is invalid; "
+                    f"first non-positive argument={float(bad.flat[0]):.6e}."
+                )
+            xi_G = np.log(log_arg) / alpha_product
         else:
             F_values = build_lookup_table(N, params_i, params_j, xi_g_grid, pre, Nnodes)
-            F_to_xi_g = interp1d(F_values, xi_g_grid, kind="linear", fill_value="extrapolate")
-            xi_G = F_to_xi_g(xi_NG)
+            xi_G = _invert_lookup_values(F_values, xi_g_grid, xi_NG)
 
-        integrand = P_ell * xi_G[np.newaxis, :]
-        clG_ij = 2 * np.pi * np.sum(w[np.newaxis, :] * integrand, axis=1)
-        clG_ij[:2] = 1e-20
+        clG_ij = inverse_basis @ xi_G
+        clG_ij[:2] = _LOW_ELL_IDENTITY_VALUE
         return i, j, clG_ij
 
     pairs = [(i, j) for i in range(N_bins) for j in range(i + 1)]
     if Parallel is None or n_jobs == 1:
         results = [process_pair_optimized(i, j) for i, j in pairs]
     else:
-        results = Parallel(n_jobs=n_jobs, verbose=v)(
+        results = Parallel(n_jobs=n_jobs, verbose=v, prefer="threads")(
             delayed(process_pair_optimized)(i, j) for i, j in pairs
         )
 
@@ -109,11 +179,7 @@ def C_NG_to_C_G(
         cl_G[i, j] = clG_ij
         cl_G[j, i] = clG_ij
 
-    for ell in [0, 1]:
-        if ell < cl_G.shape[-1]:
-            cl_G[:, :, ell] = 1e-20 * np.eye(N_bins)
-
-    return cl_G
+    return _force_low_ell_identity(cl_G, N_bins)
 
 
 def target_cls_to_latent_cls(cl_target, transform_params, *, order=3, n_jobs=4, **kwargs):
@@ -183,10 +249,18 @@ def compute_A(cl, N, fitted_params, N_bins):
 def compute_alpha_ij(Ai, Aj, c_ii, c_jj):
     """Compute multiplicative variance correction for a pair of spectra."""
 
-    arg1 = Ai / c_ii
-    arg2 = Aj / c_jj
-    arg3 = (Ai * Aj) / (c_ii * c_jj)
-    return np.sqrt(1 + arg1 + arg2 + arg3)
+    c_ii, c_jj = np.broadcast_arrays(
+        np.asarray(c_ii, dtype=float),
+        np.asarray(c_jj, dtype=float),
+    )
+    alpha = np.ones_like(c_ii, dtype=float)
+    valid = (c_ii != 0.0) & (c_jj != 0.0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        arg = (1.0 + Ai / c_ii[valid]) * (1.0 + Aj / c_jj[valid])
+    if np.any((arg < 0.0) | ~np.isfinite(arg)):
+        raise ValueError("Variance correction produced a non-finite or negative scale factor.")
+    alpha[valid] = np.sqrt(arg)
+    return float(alpha) if alpha.ndim == 0 else alpha
 
 
 def correct_cl(cl, N, fitted_params, N_bins, A=None, diag_only=True):
@@ -208,7 +282,4 @@ def correct_cl(cl, N, fitted_params, N_bins, A=None, diag_only=True):
                 cl_corrected[i, j] = cl_corrected_ij
                 cl_corrected[j, i] = cl_corrected_ij
 
-    for ell in [0, 1]:
-        if ell < cl_corrected.shape[-1]:
-            cl_corrected[:, :, ell] = 1e-20 * np.eye(N_bins)
-    return cl_corrected
+    return _force_low_ell_identity(cl_corrected, N_bins)

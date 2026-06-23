@@ -142,6 +142,19 @@ else:
     UDGrade = _UnavailableAutogradFunction("UDGrade")
 
 
+def _ell_indexed_window_values(pixwin, ell):
+    """Return one pixel-window factor per alm mode from an ell-indexed window."""
+
+    ell = np.asarray(ell, dtype=int)
+    arr = np.asarray(pixwin, dtype=float)
+    if arr.ndim != 1:
+        raise ValueError("pixwin must be a one-dimensional ell-indexed array.")
+    required = int(ell.max()) + 1 if ell.size else 0
+    if arr.size < required:
+        raise ValueError(f"pixwin has length {arr.size}, but ell={required - 1} is required.")
+    return arr[ell]
+
+
 def shear2conv(g1, g2, lmax=None):
     """Convert shear maps to convergence using HEALPix spin transforms."""
 
@@ -160,16 +173,21 @@ def shear2conv(g1, g2, lmax=None):
 
 
 def conv2shear(k, lmax=None, pixwin=None):
-    """Convert convergence to shear maps using HEALPix spin transforms."""
+    """Convert convergence to shear maps using HEALPix spin transforms.
+
+    ``pixwin`` is interpreted as an ell-indexed window with length at least
+    ``lmax + 1`` and is expanded to alm mode order internally.
+    """
 
     _require_torch_healpix()
     nside = hp.npix2nside(len(k))
     kelm = Map2Alm.apply(k, lmax)
-    if pixwin is not None:
-        kelm = kelm * pixwin
     lmax = hp.Alm.getlmax(len(kelm))
-    ell, _ = hp.Alm.getlm(lmax)
-    ell = torch.tensor(ell, dtype=torch.double)
+    ell_np, _ = hp.Alm.getlm(lmax)
+    if pixwin is not None:
+        pixwinatell = _ell_indexed_window_values(pixwin, ell_np)
+        kelm = kelm * torch.as_tensor(pixwinatell, dtype=torch.double, device=kelm.device)
+    ell = torch.tensor(ell_np, dtype=torch.double)
     good_ls = ell > 0
     fac = torch.zeros_like(ell)
     good_ell = ell[good_ls]

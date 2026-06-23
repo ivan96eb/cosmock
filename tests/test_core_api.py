@@ -202,6 +202,7 @@ def test_mock_model_sample_seeded_generation_when_healpy_is_available():
     lmax = 2
     cl_x = np.zeros((1, 1, lmax + 1), dtype=float)
     cl_x[0, 0] = [1e-20, 1e-20, 1e-3]
+    pixwin = np.ones(2 * nside + 1, dtype=float)
     transform_params = np.array([[0.2, 1.0]])
     transform_set = GPTGTransformSet("2", transform_params)
     model = cm.MockModel(
@@ -211,6 +212,7 @@ def test_mock_model_sample_seeded_generation_when_healpy_is_available():
         cl_ng=cl_x,
         cl_x=cl_x,
         nside=nside,
+        pixwin=pixwin,
         transform_set=transform_set,
     )
 

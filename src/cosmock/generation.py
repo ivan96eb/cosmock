@@ -32,30 +32,62 @@ def _validate_model_order(order) -> str:
     return order
 
 
-def _eigvec_matmul(A, x, nbins):
-    """Multiply per-ell Cholesky factors into latent alm draws."""
+def _spectra_square_root_by_ell(cl, *, psd_atol: float = 1e-12):
+    """Return per-ell square-root covariance factors with shape ``(ell, i, j)``."""
 
-    y = np.zeros_like(x)
-    for i in range(nbins):
-        for j in range(nbins):
-            y[i] += A[i, j] * x[j]
-    return y
+    cl_by_ell = np.moveaxis(np.asarray(cl, dtype=float), 2, 0)
+    cl_by_ell = 0.5 * (cl_by_ell + np.swapaxes(cl_by_ell, -1, -2))
+
+    try:
+        return np.linalg.cholesky(cl_by_ell)
+    except np.linalg.LinAlgError as exc:
+        eigvals, eigvecs = np.linalg.eigh(cl_by_ell)
+        min_eig_by_ell = np.min(eigvals, axis=1)
+        bad_ells = np.flatnonzero(min_eig_by_ell < -psd_atol)
+        if bad_ells.size:
+            first = tuple(int(ell) for ell in bad_ells[:5])
+            raise ValueError(
+                "cl must be positive semidefinite at each ell before sampling; "
+                f"min eigenvalue={float(min_eig_by_ell.min()):.6e}, "
+                f"problematic ell values start with {first}."
+            ) from exc
+
+        clipped = np.clip(eigvals, 0.0, None)
+        return eigvecs * np.sqrt(clipped)[:, np.newaxis, :]
 
 
-def _apply_cl(xlm, cl, gen_lmax, nbins):
+def _apply_cl(xlm, cl, gen_lmax, *, factors_by_ell=None):
     """Apply target latent spectra to unit Gaussian alm draws."""
 
     hp = require_healpy("Applying latent spectra to HEALPix alms")
+    xlm = np.asarray(xlm, dtype=complex)
+    cl = np.asarray(cl, dtype=float)
     ell, emm = hp.Alm.getlm(gen_lmax)
-    L = np.linalg.cholesky(cl.T).T
 
-    xlm_real = xlm.real
-    xlm_imag = xlm.imag
-    L_arr = np.swapaxes(L[:, :, ell[ell > -1]], 0, 1)
+    if xlm.ndim != 2:
+        raise ValueError("xlm must have shape (n_bins, n_alm).")
+    nbins = xlm.shape[0]
+    if xlm.shape[1] != len(ell):
+        raise ValueError(f"xlm has {xlm.shape[1]} modes, expected {len(ell)}.")
+    if cl.ndim != 3 or cl.shape[:2] != (nbins, nbins) or cl.shape[2] <= gen_lmax:
+        raise ValueError(
+            "cl must have shape (n_bins, n_bins, gen_lmax + 1) for the supplied xlm."
+        )
 
-    ylm_real = _eigvec_matmul(L_arr, xlm_real, nbins) / np.sqrt(2.0)
-    ylm_imag = _eigvec_matmul(L_arr, xlm_imag, nbins) / np.sqrt(2.0)
-    ylm_real[:, ell[emm == 0]] *= np.sqrt(2)
+    if factors_by_ell is None:
+        factors_by_ell = _spectra_square_root_by_ell(cl)
+    else:
+        factors_by_ell = np.asarray(factors_by_ell, dtype=float)
+        if factors_by_ell.ndim != 3 or factors_by_ell.shape[1:] != (nbins, nbins):
+            raise ValueError("factors_by_ell must have shape (lmax + 1, n_bins, n_bins).")
+        if factors_by_ell.shape[0] <= gen_lmax:
+            raise ValueError("factors_by_ell must include entries through gen_lmax.")
+    factors_at_alm = factors_by_ell[ell]
+
+    ylm_real = np.einsum("aij,ja->ia", factors_at_alm, xlm.real) / np.sqrt(2.0)
+    ylm_imag = np.einsum("aij,ja->ia", factors_at_alm, xlm.imag) / np.sqrt(2.0)
+    ylm_real = np.where(emm == 0, ylm_real * np.sqrt(2.0), ylm_real)
+    ylm_imag = np.where(emm == 0, 0.0, ylm_imag)
     return ylm_real + 1j * ylm_imag
 
 
@@ -83,7 +115,16 @@ def _generate_xlm(nbins, gen_lmax, *, seed=None, rng=None):
     return xlm, [xlm_real, xlm_imag]
 
 
-def _generate_mock_y_lm(cl, nbins, gen_lmax, xlms=None, *, seed=None, rng=None):
+def _generate_mock_y_lm(
+    cl,
+    nbins,
+    gen_lmax,
+    xlms=None,
+    *,
+    seed=None,
+    rng=None,
+    factors_by_ell=None,
+):
     """Generate latent Gaussian alms with target spectra."""
 
     if xlms is not None:
@@ -91,14 +132,32 @@ def _generate_mock_y_lm(cl, nbins, gen_lmax, xlms=None, *, seed=None, rng=None):
         _xlm = None
     else:
         xlm, _xlm = _generate_xlm(nbins, gen_lmax, seed=seed, rng=rng)
-    return _apply_cl(xlm, cl, gen_lmax, nbins), _xlm
+    return _apply_cl(xlm, cl, gen_lmax, factors_by_ell=factors_by_ell), _xlm
 
 
-def _get_y_maps(cl, nside, nbins, gen_lmax, xlms=None, *, seed=None, rng=None):
+def _get_y_maps(
+    cl,
+    nside,
+    nbins,
+    gen_lmax,
+    xlms=None,
+    *,
+    seed=None,
+    rng=None,
+    factors_by_ell=None,
+):
     """Generate latent Gaussian HEALPix maps."""
 
     hp = require_healpy("Generating latent HEALPix maps")
-    y_lm, xlm = _generate_mock_y_lm(cl, nbins, gen_lmax, xlms, seed=seed, rng=rng)
+    y_lm, xlm = _generate_mock_y_lm(
+        cl,
+        nbins,
+        gen_lmax,
+        xlms,
+        seed=seed,
+        rng=rng,
+        factors_by_ell=factors_by_ell,
+    )
     y_maps = []
     for i in range(nbins):
         y_map = hp.alm2map(np.ascontiguousarray(y_lm[i]), nside, lmax=gen_lmax, pol=False)
@@ -106,14 +165,40 @@ def _get_y_maps(cl, nside, nbins, gen_lmax, xlms=None, *, seed=None, rng=None):
     return np.array(y_maps), xlm
 
 
+def _evaluate_gptg_by_bin(y_maps, nbins, order, fitted_params):
+    """Evaluate GPTG transforms for all bins with one broadcasted NumPy expression."""
+
+    order = str(order)
+    y_maps = np.asarray(y_maps, dtype=float)
+    params = np.asarray(fitted_params, dtype=float)
+    if y_maps.ndim != 2 or y_maps.shape[0] != nbins:
+        raise ValueError("y_maps must have shape (n_bins, n_pix).")
+    if params.shape[0] != nbins:
+        raise ValueError("fitted_params must contain one parameter row per bin.")
+
+    if order == "2":
+        if params.shape[1] != 2:
+            raise ValueError("G2 expects two fitted parameters per bin.")
+        alpha = params[:, 0, np.newaxis]
+        beta = params[:, 1, np.newaxis]
+        return beta * np.exp(alpha * y_maps - 0.5 * alpha**2) - beta
+
+    if order == "3":
+        if params.shape[1] != 3:
+            raise ValueError("G3 expects three fitted parameters per bin.")
+        a = params[:, 0, np.newaxis]
+        b = params[:, 1, np.newaxis]
+        c = params[:, 2, np.newaxis]
+        arg = np.exp(a * y_maps - 0.5 * a**2) + b * y_maps + c
+        return arg / (1.0 + c) - 1.0
+
+    return np.array([gptg_transform(y_maps[i], order, params[i]) for i in range(nbins)])
+
+
 def _get_kappa(y_maps, nbins, N, fitted_params):
     """Apply the fitted transform to latent Gaussian maps."""
 
-    k_list = []
-    for i in range(nbins):
-        k_nf = gptg_transform(y_maps[i], N, fitted_params[i])
-        k_list.append(k_nf)
-    return np.array(k_list)
+    return _evaluate_gptg_by_bin(y_maps, nbins, N, fitted_params)
 
 
 def _get_kappa_pixwin(y_maps, nbins, N, fitted_params, nside, pixwinatell):
@@ -122,11 +207,16 @@ def _get_kappa_pixwin(y_maps, nbins, N, fitted_params, nside, pixwinatell):
     hp = require_healpy("Applying a HEALPix pixel window")
     k_list = []
     lmax = 2 * nside
+    ell, _ = hp.Alm.getlm(lmax)
+    pixwinatell = np.asarray(pixwinatell, dtype=float)
+    if pixwinatell.shape != (len(ell),):
+        raise ValueError("pixwinatell must have one value per alm mode for lmax=2*nside.")
+    kappa_maps = _evaluate_gptg_by_bin(y_maps, nbins, N, fitted_params)
     for i in range(nbins):
-        k_nf = gptg_transform(y_maps[i], N, fitted_params[i])
+        k_nf = kappa_maps[i]
         klm = hp.map2alm(k_nf, lmax=lmax)
         klm = klm * pixwinatell
-        k_list.append(hp.alm2map(klm, nside))
+        k_list.append(hp.alm2map(klm, nside, lmax=lmax))
     return np.array(k_list)
 
 
@@ -136,17 +226,24 @@ def _get_kappa_lm_pixwin(y_maps, nbins, N, fitted_params, nside, pixwinatell):
     hp = require_healpy("Applying a HEALPix pixel window")
     k_lm_list = []
     lmax = 2 * nside
+    ell, _ = hp.Alm.getlm(lmax)
+    pixwinatell = np.asarray(pixwinatell, dtype=float)
+    if pixwinatell.shape != (len(ell),):
+        raise ValueError("pixwinatell must have one value per alm mode for lmax=2*nside.")
+    kappa_maps = _evaluate_gptg_by_bin(y_maps, nbins, N, fitted_params)
     for i in range(nbins):
-        k_nf = gptg_transform(y_maps[i], N, fitted_params[i])
+        k_nf = kappa_maps[i]
         klm = hp.map2alm(k_nf, lmax=lmax)
         klm = klm * pixwinatell
         k_lm_list.append(klm)
     return np.array(k_lm_list)
 
 
-def _pixwin_at_alm(pixwin, *, nside):
+def _pixwin_at_alm(pixwin, *, nside, lmax=None):
+    """Expand an ell-indexed pixel window to one factor per HEALPix alm mode."""
+
     hp = require_healpy("Applying a HEALPix pixel window")
-    lmax = 2 * int(nside)
+    lmax = 2 * int(nside) if lmax is None else int(lmax)
     pixwin = validate_pixwin(pixwin, lmax=lmax)
     ell_pixwin, _ = hp.Alm.getlm(lmax)
     return pixwin[ell_pixwin]
@@ -162,6 +259,8 @@ def _create_mock(
     rng=None,
     apply_pixwin=False,
     pixwin=None,
+    factors_by_ell=None,
+    pixwinatell=None,
 ):
     """Create one mock kappa map from latent spectra and transform parameters."""
 
@@ -175,12 +274,20 @@ def _create_mock(
 
     rng = _rng(seed=seed, rng=rng)
     gen_lmax = cl_x.shape[-1] - 1
-    y_maps, _ = _get_y_maps(cl_x, int(nside), nbins, gen_lmax, rng=rng)
+    y_maps, _ = _get_y_maps(
+        cl_x,
+        int(nside),
+        nbins,
+        gen_lmax,
+        rng=rng,
+        factors_by_ell=factors_by_ell,
+    )
 
     if apply_pixwin:
-        if pixwin is None:
+        if pixwin is None and pixwinatell is None:
             raise ValueError("pixwin is required when apply_pixwin=True.")
-        pixwinatell = _pixwin_at_alm(pixwin, nside=int(nside))
+        if pixwinatell is None:
+            pixwinatell = _pixwin_at_alm(pixwin, nside=int(nside))
         return _get_kappa_pixwin(y_maps, nbins, str(order), params, int(nside), pixwinatell)
 
     return _get_kappa(y_maps, nbins, str(order), params)
@@ -407,16 +514,27 @@ def _generate_mocks(model: MockModel, *, n_mocks: int = 1, seed=None, apply_pixw
     if apply_pixwin is None:
         apply_pixwin = model.pixwin is not None
     rng = np.random.default_rng(seed)
+    cl_x = validate_cls(model.cl_x, n_bins=model.n_bins, name="cl_x")
+    factors_by_ell = _spectra_square_root_by_ell(cl_x)
+    pixwinatell = None
+    if apply_pixwin:
+        if model.pixwin is None:
+            raise ValueError("model.pixwin is required when apply_pixwin=True.")
+        if model.nside is None:
+            raise ValueError("model.nside is required when apply_pixwin=True.")
+        pixwinatell = _pixwin_at_alm(model.pixwin, nside=int(model.nside))
     mocks = []
     for _ in range(int(n_mocks)):
         mock = _create_mock(
-            model.cl_x,
+            cl_x,
             model.transform_params,
             nside=model.nside,
             order=model.order,
             rng=rng,
             apply_pixwin=apply_pixwin,
             pixwin=model.pixwin,
+            factors_by_ell=factors_by_ell,
+            pixwinatell=pixwinatell,
         )
         mocks.append(mock)
     return np.asarray(mocks)
