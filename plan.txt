@@ -21,4 +21,4 @@ mock_delta(seed, N, lambda, Cl_gauss) -> delta_mock
 Wrap the general workflow to organize it nicely as follows:
 
 delta_params = fitter(delta, Cl_delta) -> NamedTuple(lambda, Cl_gauss, N)
-mock = mock_delta(delta_params, seed) 
+mocks = generate_mocks(delta_params, num_mocks, seed) 
