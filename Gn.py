@@ -1,5 +1,5 @@
 import numpy as np
-from structs import NonlinParameters
+from .structs import NonlinParameters
 
 
 def Gn(x, params):
