@@ -31,4 +31,52 @@ def apply_cl_G(xlm, Cl_G, gen_lmax):
     ylm_real = np.where(gen_emm == 0, ylm_real * np.sqrt(2), ylm_real)
     ylm_imag = np.where(gen_emm == 0, 0.0, ylm_imag)
     return ylm_real + 1j * ylm_imag 
-    
+
+def get_y_maps(cl,nside,nbins,gen_lmax,xlms=None):
+    if xlms is not None:
+        xlm = xlms
+        _xlm = None
+    else:
+        xlm, _xlm = generate_xlm(nbins,gen_lmax)
+    y_lm, xlm = apply_cl_G(xlm, cl,gen_lmax,nbins), _xlm
+    y_maps = []
+    for i in range(nbins):
+        y_map = hp.alm2map(np.ascontiguousarray(y_lm[i]), nside, lmax=gen_lmax, pol=False)
+        y_maps.append(y_map)    
+    return np.array(y_maps),xlm    
+
+def get_kappa(y_maps,nbins,N,fitted_params):
+    k_list = []
+    for i in range(nbins):
+        k_nf = Gn(y_maps[i], N, fitted_params[i])
+        k = k_nf
+        k_list.append(k)  
+    k_arr  = np.array(k_list)
+    return k_arr  
+
+def get_kappa_pixwin(y_maps,nbins,N,fitted_params,nside,pixwinatell):
+    k_list = []
+    lmax = 2*nside
+    for i in range(nbins):
+        k_nf = Gn(y_maps[i], N, fitted_params[i])
+        k = k_nf
+        klm = hp.map2alm(k,lmax=lmax)
+        klm = klm * pixwinatell 
+        k = hp.alm2map(klm,nside)
+        k_list.append(k)  
+    k_arr  = np.array(k_list)
+
+    return k_arr  
+
+def get_kappa_lm_pixwin(y_maps,nbins,N,fitted_params,nside,pixwinatell):
+    k_lm_list = []
+    lmax = 2*nside
+    for i in range(nbins):
+        k_nf = Gn(y_maps[i], N, fitted_params[i])
+        k = k_nf
+        klm = hp.map2alm(k,lmax=lmax)
+        klm = klm * pixwinatell 
+        k_lm_list.append(klm)  
+    k_lm_arr  = np.array(k_lm_list)
+
+    return k_lm_arr  
