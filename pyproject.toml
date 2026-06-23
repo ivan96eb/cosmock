@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cosmock"
+version = "0.1.0"
+description = "Generate statistically matched mock cosmological kappa fields from input convergence maps."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "BSD-3-Clause" }
+authors = []
+keywords = ["cosmology", "weak lensing", "kappa", "mock fields", "HEALPix"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: BSD License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Astronomy",
+  "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+  "numpy",
+  "scipy",
+  "joblib",
+]
+
+[project.optional-dependencies]
+healpix = ["healpy"]
+plot = ["matplotlib"]
+ccl = ["pyccl"]
+torch = ["torch", "healpy"]
+dev = ["pytest", "pytest-cov", "ruff", "jupyter", "nbmake", "build"]
+
+[project.urls]
+Homepage = "https://github.com/ivan96eb/cosmock"
+Repository = "https://github.com/ivan96eb/cosmock"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+

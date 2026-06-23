@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use cosmock, please cite the software and the scientific formalism it implements."
+title: "cosmock: statistically matched mock cosmological kappa fields"
+version: "0.1.0"
+date-released: "2026-06-22"
+abstract: "cosmock calibrates on convergence/kappa maps and generates statistically matched mock kappa fields."
+authors:
+  - name: "cosmock contributors"
+identifiers:
+  - type: url
+    value: "https://arxiv.org/abs/2411.04759"
+    description: "Scientific formalism and algorithm implemented by the initial codebase."
