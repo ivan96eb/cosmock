@@ -48,16 +48,18 @@ def gptg_transform(x, order, params, n_nodes: int = 20):
         norm = 1 / (1 + c)
         return norm * arg - 1
 
-    if n == "4":
-        a1, a2, t, x0 = params
-        arg1 = np.exp(a1 * x - 0.5 * a1**2)
-        arg2 = (1 + np.exp((x - x0) * t)) ** ((a2 - a1) / t)
-        return compute_normalization() * arg1 * arg2 - 1
-
-    a1, a2, b, t, x0 = params
-    arg1 = np.exp(a1 * x - 0.5 * a1**2) + b * x
-    arg2 = (1 + np.exp((x - x0) * t)) ** ((a2 - a1) / t)
-    return compute_normalization() * arg1 * arg2 - 1
+    # if n == "4":
+    #     a1, a2, t, x0 = params
+    #     arg1 = np.exp(a1 * x - 0.5 * a1**2)
+    #     arg2 = (1 + np.exp((x - x0) * t)) ** ((a2 - a1) / t)
+    #     return compute_normalization() * arg1 * arg2 - 1
+    # if n == "5":
+        # a1, a2, b, t, x0 = params
+        # arg1 = np.exp(a1 * x - 0.5 * a1**2) + b * x
+        # arg2 = (1 + np.exp((x - x0) * t)) ** ((a2 - a1) / t)
+        # return compute_normalization() * arg1 * arg2 - 1
+    else:
+        raise ValueError(f"Unknown GPTG order: {n}")
 
 
 @dataclass(frozen=True)
