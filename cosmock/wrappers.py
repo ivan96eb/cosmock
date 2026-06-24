@@ -1,9 +1,9 @@
 import numpy as np
 import healpy as hp
-from structs import NonlinParameters
-from fitter import histogramer2d, fit_gn_with_constraint
-from Cls import C_NG_to_C_G
-from mocker import get_y_maps, get_kappa_pixwin
+from .structs import NonlinParameters
+from .fitter import histogramer2d, fit_gn_with_constraint
+from .Cls import C_NG_to_C_G
+from .mocker import get_y_maps, get_kappa_pixwin
 
 
 def fit_parameters(maps, Cl_delta, N):
@@ -14,7 +14,7 @@ def fit_parameters(maps, Cl_delta, N):
     lbda = np.zeros((Nbins, N))
     for i in range(Nbins):
         x, y = histogramer2d(maps[i], 1000)
-        lbda[i] = fit_gn_with_constraint(x, y, N, Cl_delta[i,i,3*Nside])
+        lbda[i] = fit_gn_with_constraint(x, y, N, Cl_delta[i,i,:3*Nside])
     
     print(f'Done fitting the G{N} parameters')
 
@@ -34,11 +34,12 @@ def generate_mocks(params, Nmocks, pixwin=None):
     N = params.N
     Cl_G = params.Cl_Gauss
     mapshape = params.mapshape
-    Nbins = mapshape[0]
-    Npix  = mapshape[1]
-    Nside = hp.npix2nside(Npix)
+    Nbins    = mapshape[0]
+    Npix     = mapshape[1]
+    Nside    = hp.npix2nside(Npix)
     gen_lmax = 3*Nside-1
-    ell, emm = hp.Alm.getlm(gen_lmax)
+    lmax     = 2*Nside
+    ell, emm = hp.Alm.getlm(lmax)
 
     if pixwin is None:
         pixwin = hp.pixwin(Nside, False, gen_lmax)

@@ -43,7 +43,7 @@ def get_y_maps(cl,nside,nbins,gen_lmax,xlms=None):
     for i in range(nbins):
         y_map = hp.alm2map(np.ascontiguousarray(y_lm[i]), nside, lmax=gen_lmax, pol=False)
         y_maps.append(y_map)    
-    return np.array(y_maps),xlm    
+    return np.array(y_maps)    
 
 def get_kappa(y_maps,nbins,N,fitted_params):
     k_list = []
