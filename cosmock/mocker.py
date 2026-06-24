@@ -38,7 +38,7 @@ def get_y_maps(cl,nside,nbins,gen_lmax,xlms=None):
         _xlm = None
     else:
         xlm, _xlm = generate_xlm(nbins,gen_lmax)
-    y_lm, xlm = apply_cl_G(xlm, cl,gen_lmax,nbins), _xlm
+    y_lm, xlm = apply_cl_G(xlm, cl,gen_lmax), _xlm
     y_maps = []
     for i in range(nbins):
         y_map = hp.alm2map(np.ascontiguousarray(y_lm[i]), nside, lmax=gen_lmax, pol=False)
