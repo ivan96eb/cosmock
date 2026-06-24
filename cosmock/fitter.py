@@ -150,7 +150,7 @@ def fit_gn_with_constraint(x_data, y_data, N, cls, initial_lbda = None):
         """Least squares cost"""
         lbda = calc_constrained_lbda(unconstrained_lbda, var, N)
 
-        params = NonlinParameters(lbda = lbda, N = N)
+        params = NonlinParameters(lbda = lbda, N = N,Cl_Gauss=None)
 
         try:
             y_pred = Gn(x_data, params)
