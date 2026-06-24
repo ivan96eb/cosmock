@@ -13,6 +13,3 @@ dependencies = [
     "joblib>=1.2",
     "healpy>=1.16",
 ]
-
-[tool.setuptools.packages.find]
-where = ["."]
