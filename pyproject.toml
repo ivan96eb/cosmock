@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cosmock"
 version = "0.0.1"
-
+requires-python = ">=3.10"
 
 dependencies = [
     "numpy>=2.0",
@@ -13,3 +13,6 @@ dependencies = [
     "joblib>=1.2",
     "healpy>=1.16",
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
