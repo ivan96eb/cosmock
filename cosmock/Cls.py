@@ -3,7 +3,6 @@ from numpy.polynomial.hermite import hermgauss
 from scipy.special import eval_legendre
 from scipy.interpolate import interp1d
 from joblib import Parallel, delayed
-from .structs import NonlinParameters
 from .Gn import Gn
 
 def get_gh_nodes_weights(n_nodes):
