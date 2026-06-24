@@ -131,7 +131,7 @@ def C_NG_to_C_G(cl_NG, fitted_params, N_bins, N,
         # xi_NG -> xi_G
         # Only in the case N = 2 we have an analitycal relation.
         # In the other cases, we have to build lookup table.
-        if N == '2':
+        if N == 2:
             alpha_i, beta_i = params_i
             alpha_j, beta_j = params_j
             xi_G = np.log(1 + xi_NG / (beta_i * beta_j)) / (alpha_i * alpha_j)
