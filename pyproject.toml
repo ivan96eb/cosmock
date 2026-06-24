@@ -31,12 +31,10 @@ dependencies = [
     "numpy>=1.23",
     "scipy>=1.9",
     "joblib>=1.2",
+    "healpy>=1.16",
 ]
 
 [project.optional-dependencies]
-healpix = [
-    "healpy>=1.16",
-]
 dev = [
     "build>=1.2",
     "pytest>=8",
