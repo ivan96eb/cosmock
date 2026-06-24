@@ -28,7 +28,7 @@ def get_gh_nodes_weights(n_nodes):
     return y_nodes, y_weights
 
 
-def F_gauss_hermite_single(n, params_i, params_j, xi_g,
+def F_gauss_hermite_single(N, params_i, params_j, xi_g,
                            n_nodes=40,
                            precomputed=None):
     if precomputed is None:
@@ -51,17 +51,17 @@ def F_gauss_hermite_single(n, params_i, params_j, xi_g,
     xi_vals = Xstack[:, 0]
     xj_vals = Xstack[:, 1]
 
-    Gn_i = Gn(xi_vals, params_i)
-    Gn_j = Gn(xj_vals, params_j)
+    Gn_i = Gn(xi_vals, N, params_i)
+    Gn_j = Gn(xj_vals, N, params_j)
 
     integrand = Gn_i * Gn_j * (WI * WJ).ravel()
     result = integrand.sum()
     return result
 
-def build_lookup_table(n, params_i,params_j, xi_g_values, pre,nnodes=20):
+def build_lookup_table(N, params_i,params_j, xi_g_values, pre,nnodes=20):
     results = []
     for xi_g in xi_g_values:
-        result = F_gauss_hermite_single(n, params_i,params_j, xi_g, nnodes,pre)
+        result = F_gauss_hermite_single(N, params_i,params_j, xi_g, nnodes,pre)
         results.append(result)
     return np.array(results)
 
