@@ -5,3 +5,4 @@ class NonlinParameters(NamedTuple):
     lbda: np.ndarray
     N: int
     Cl_Gauss: np.ndarray
+    mapshape: tuple
