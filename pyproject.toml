@@ -8,8 +8,8 @@ version = "0.0.1"
 
 
 dependencies = [
-    "numpy>=1.23",
-    "scipy>=1.9",
-    "joblib>=1.2",
-    "healpy>=1.16",
+    "numpy>=2.4",
+    "scipy>=1.17",
+    "joblib>=1.5",
+    "healpy>=1.19",
 ]
