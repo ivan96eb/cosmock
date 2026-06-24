@@ -1,6 +1,5 @@
 import numpy as np
 from .Gn import Gn
-from .structs import NonlinParameters
 from scipy.optimize import minimize
 from scipy.stats import norm
 
