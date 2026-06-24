@@ -182,3 +182,5 @@ def fit_gn_with_constraint(x_data, y_data, N, cls, initial_lbda = None):
         method='BFGS'
     )
     return calc_constrained_lbda(result.x, var, N)
+
+#a
