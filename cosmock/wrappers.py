@@ -8,6 +8,8 @@ from .mocker import get_y_maps, get_kappa_pixwin
 
 def fit_parameters(maps, Cl_delta, N):
 
+    assert N == 2 or N == 3, f'N={N} is not a supported transformation'
+
     Nbins = maps.shape[0]
     Nside = hp.npix2nside(maps.shape[1])
 
