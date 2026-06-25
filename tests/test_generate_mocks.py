@@ -5,12 +5,12 @@ import pytest
 
 def test_generate_mocks():
 
-    path_to_test_map = './data/Kappa_Gower_St_ID_44_DESy3_tomography_Nside_256.npy'
-    path_to_test_CL_G_2 = './data/Cl_Gauss_G2.npy'
-    path_to_test_CL_G_3 = './data/Cl_Gauss_G3.npy'
-    path_to_fit_params_G2 = './data/fitted_params_G2.npy'
-    path_to_fit_params_G3 = './data/fitted_params_G3.npy'
-    path_to_pixwin = './data/pixwin_256.npy'
+    path_to_test_map = '../data/Kappa_Gower_St_ID_44_DESy3_tomography_Nside_256.npy'
+    path_to_test_CL_G_2 = '../data/Cl_Gauss_G2.npy'
+    path_to_test_CL_G_3 = '../data/Cl_Gauss_G3.npy'
+    path_to_fit_params_G2 = '../data/fitted_params_G2.npy'
+    path_to_fit_params_G3 = '../data/fitted_params_G3.npy'
+    path_to_pixwin = '../data/pixwin_256.npy'
 
     testmap = np.load(path_to_test_map)
     Cl_G2 = np.load(path_to_test_CL_G_2)

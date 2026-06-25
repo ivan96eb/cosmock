@@ -5,8 +5,8 @@ import pytest
 
 def test_fit_parameters_N():
 
-    path_to_test_map = './data/Kappa_Gower_St_ID_44_DESy3_tomography_Nside_256.npy'
-    path_to_test_Cl = './data/UNBIASED_3point75nsideminus1_Cls_NG_Gower_St_ID_44.npy'
+    path_to_test_map = '../data/Kappa_Gower_St_ID_44_DESy3_tomography_Nside_256.npy'
+    path_to_test_Cl = '../data/UNBIASED_3point75nsideminus1_Cls_NG_Gower_St_ID_44.npy'
 
     testmap = np.load(path_to_test_map)
     testCl = np.load(path_to_test_Cl)
@@ -17,12 +17,12 @@ def test_fit_parameters_N():
 
 def test_fit_parameters_Cl():
 
-    path_to_test_map = './data/Kappa_Gower_St_ID_44_DESy3_tomography_Nside_256.npy'
-    path_to_test_Cl = './data/UNBIASED_3point75nsideminus1_Cls_NG_Gower_St_ID_44.npy'
-    path_to_test_CL_G_2 = './data/Cl_Gauss_G2.npy'
-    path_to_test_CL_G_3 = './data/Cl_Gauss_G3.npy'
-    path_to_fit_params_G2 = './data/fitted_params_G2.npy'
-    path_to_fit_params_G3 = './data/fitted_params_G3.npy'
+    path_to_test_map = '../data/Kappa_Gower_St_ID_44_DESy3_tomography_Nside_256.npy'
+    path_to_test_Cl = '../data/UNBIASED_3point75nsideminus1_Cls_NG_Gower_St_ID_44.npy'
+    path_to_test_CL_G_2 = '../data/Cl_Gauss_G2.npy'
+    path_to_test_CL_G_3 = '../data/Cl_Gauss_G3.npy'
+    path_to_fit_params_G2 = '../data/fitted_params_G2.npy'
+    path_to_fit_params_G3 = '../data/fitted_params_G3.npy'
 
     testmap = np.load(path_to_test_map)
     testCl = np.load(path_to_test_Cl)
