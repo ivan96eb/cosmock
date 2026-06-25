@@ -99,10 +99,8 @@ Generates mock kappa-map cubes from fitted parameters.
 ## Citation
 
 The formal software citation for `cosmock` will be provided by the
-forthcoming software paper. Until then, cite the repository version or
-commit hash used in your analysis so that results can be reproduced.
+forthcoming software paper.
 
-This package uses ideas from the paper
+This package uses the method from the paper
 [Fast Generation of Weak Lensing Maps with Analytical Point Transformation
-Functions](https://arxiv.org/abs/2411.04759), but that paper is background
-for the method rather than the software citation.
+Functions](https://arxiv.org/abs/2411.04759)
