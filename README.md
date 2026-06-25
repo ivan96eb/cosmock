@@ -1,106 +1,105 @@
 # cosmock
 
-`cosmock` generates mock weak-lensing convergence (`kappa`) maps from an
-input kappa map and its angular power spectra. It implements a
-generalized point-transformed Gaussian mock-generation workflow using ideas
-from the paper
+`cosmock` generates mock HEALPix maps for scalar random fields when you can
+specify:
+
+1. the field's one-point distribution from example maps, and
+2. the field's two-point statistics as angular power spectra.
+
+The bundled data are weak-lensing convergence (`kappa`) maps, but the package
+boundary is intentionally generic: density, convergence, or another scalar
+field can use the same workflow if the input maps and spectra follow the
+documented shapes.
+
+The implementation uses generalized point-transformed Gaussian fields,
+following the method in
 [Fast Generation of Weak Lensing Maps with Analytical Point Transformation
 Functions](https://arxiv.org/abs/2411.04759).
 
-The standard user path is:
-
-1. load a tomographic kappa map and its non-Gaussian `C_ell` spectra,
-2. fit the point-transformation parameters with `fit_parameters`,
-3. sample one or more mock kappa-map cubes with `generate_mocks`.
-
-Kappa is dimensionless lensing convergence. The spectra passed to and
-returned by this package are angular power spectra of those fields.
-
 ## Installation
 
-From the repository root, install the package in editable mode:
+From the repository root:
 
 ```bash
 python -m pip install -e .
 ```
 
+For development:
+
+```bash
+python -m pip install -r requirements-dev.txt
+```
+
 ## Quickstart
 
-The repository includes a small example data set under `data/`. The code
-below fits a `G3` transformation to the included kappa map and generates
-one mock map cube.
+The standard workflow has two public functions:
 
 ```python
 import numpy as np
 
-from cosmock import fit_parameters, generate_mocks
+import cosmock
 
-path_to_map = "data/Kappa_Gower_St_ID_44_DESy3_tomography_Nside_256.npy"
-path_to_cl = "data/UNBIASED_3point75nsideminus1_Cls_NG_Gower_St_ID_44.npy"
-path_to_pixwin = "data/pixwin_256.npy"
+field_maps = np.load("data/Kappa_Gower_St_ID_44_DESy3_tomography_Nside_256.npy")
+cl_field = np.load("data/UNBIASED_3point75nsideminus1_Cls_NG_Gower_St_ID_44.npy")
+pixwin = np.load("data/pixwin_256.npy")
 
-kappa_map = np.load(path_to_map)
-cl_ng = np.load(path_to_cl)
-pixwin = np.load(path_to_pixwin)
-
-order = 3
-n_mocks = 1
-
-params = fit_parameters(kappa_map, cl_ng, order)
-mocks = generate_mocks(params, n_mocks, pixwin=pixwin)
+fit = cosmock.fit_field_model(field_maps, cl_field, order=3)
+mocks = cosmock.generate_field_mocks(fit, n_mocks=1, seed=123, pixwin=pixwin)
 
 print(mocks.shape)
-```
-
-Expected progress messages:
-
-```text
-Done fitting the G3 parameters
-Done finding the power spectrum of the underlying gaussian random field
 ```
 
 Expected output shape:
 
 ```text
-(1, N_bins, N_pix)
+(1, n_bins, n_pix)
 ```
 
-where `N_bins` is the number of tomographic bins in `kappa_map` and
-`N_pix` is the number of HEALPix pixels per map. For the included data,
-`N_pix` corresponds to `nside=256`.
+where `n_bins` is the number of input fields or tomographic bins and `n_pix`
+is the number of HEALPix pixels per map.
 
 ## Public API
 
-### `fit_parameters(maps, Cl_delta, N)`
+### `fit_field_model(field_maps, cl_field, order, *, ...)`
 
-Fits the nonlinear transformation parameters for each tomographic bin and
-converts the input non-Gaussian spectra into spectra for the latent
-Gaussian field.
+Fits the point-transformation parameters that match the one-point statistics
+of the input scalar-field maps, then converts the target non-Gaussian field
+spectra into spectra for the latent Gaussian fields.
 
-- `maps`: array with shape `(N_bins, N_pix)` containing dimensionless
-  kappa maps.
-- `Cl_delta`: array with shape `(N_bins, N_bins, N_ell)` containing the
-  target kappa angular power spectra.
-- `N`: transformation order. The current implementation supports `2` and
-  `3`.
-- returns: a `NonlinParameters` object containing fitted parameters,
-  Gaussian spectra, transformation order, and the original map shape.
+- `field_maps`: array with shape `(n_bins, n_pix)` containing finite HEALPix
+  scalar-field maps.
+- `cl_field`: array with shape `(n_bins, n_bins, n_ell)` containing target
+  angular power spectra for the same fields.
+- `order`: transformation order, currently `2` or `3`.
+- returns: `FieldMockFit`, a frozen dataclass containing transform parameters,
+  latent spectra, HEALPix resolution, and generation limits.
 
-### `generate_mocks(params, Nmocks, pixwin=None)`
+### `generate_field_mocks(fit, n_mocks, *, seed=None, pixwin=None)`
 
-Generates mock kappa-map cubes from fitted parameters.
+Samples latent Gaussian HEALPix maps, applies the fitted point transformation,
+and applies a HEALPix pixel window.
 
-- `params`: the object returned by `fit_parameters`.
-- `Nmocks`: number of mock cubes to generate.
-- `pixwin`: optional HEALPix pixel window array. If omitted, `healpy`
-  computes it from the fitted map resolution.
-- returns: array with shape `(Nmocks, N_bins, N_pix)`.
+- `fit`: the `FieldMockFit` returned by `fit_field_model`.
+- `n_mocks`: number of mock map cubes to generate.
+- `seed`: optional NumPy random seed, `SeedSequence`, or `Generator`.
+- `pixwin`: optional HEALPix pixel window indexed by multipole. If omitted,
+  `healpy.pixwin` is computed from the fitted resolution.
+- returns: array with shape `(n_mocks, n_bins, n_pix)`.
+
+## Development Checks
+
+```bash
+python -m compileall cosmock tests
+python -m pytest -q
+python -m ruff check cosmock tests
+python -m build --no-isolation
+```
 
 ## Citation
 
-The formal software citation for `cosmock` will be provided by the
-forthcoming software paper.
+The formal software citation for `cosmock` will be provided by the forthcoming
+software paper.
 
 This package uses the method from the paper
 [Fast Generation of Weak Lensing Maps with Analytical Point Transformation
-Functions](https://arxiv.org/abs/2411.04759)
+Functions](https://arxiv.org/abs/2411.04759).
