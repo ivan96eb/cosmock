@@ -1,20 +1,30 @@
+"""Analytical point-transformation models used by cosmock."""
+
 import numpy as np
 
 def Gn(x, N, lbda):
-    """
-    Evaluate Gn transformation at given x values
-    
+    """Evaluate a fitted ``G_N`` transformation.
+
     Parameters
     ----------
-    x : array of x values (standard normal inputs)
-    n : str, which G function to use ('2', '3', '4', '5')
-    params : array of parameters for the transformation
-    N_nodes : number of Gauss-Hermite quad points to compute
-             integral for normalization.
-    
+    x : array_like
+        Standard-normal input values from the latent Gaussian field.
+    N : int
+        Transformation order. The current implementation supports ``2`` and
+        ``3``.
+    lbda : array_like
+        Transformation parameters. For ``N=2`` this is ``(alpha, beta)``.
+        For ``N=3`` this is ``(a, b, c)``.
+
     Returns
     -------
-    y : transformed values
+    numpy.ndarray
+        Transformed values with the same broadcast shape as ``x``.
+
+    Raises
+    ------
+    ValueError
+        If ``N`` is not ``2`` or ``3``.
     """
     # Evaluate transformation
     if N == 2:

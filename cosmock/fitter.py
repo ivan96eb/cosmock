@@ -1,45 +1,48 @@
+"""Fitting utilities for point-transformation parameters."""
+
 import numpy as np
 from .Gn import Gn
 from scipy.optimize import minimize
 from scipy.stats import norm
 
 def variance_from_Cl(Cl):
-    """
-    Computes the variance of the field
-    as predicted by the cls.
-    
+    """Compute field variance from an angular power spectrum.
+
     Parameters
     ----------
-    Cl : array
-             Array of cls
-    ell_min : float 
-             First ell to start calculation. 
-             Defaults to ell=0. 
-    
+    Cl : array_like
+        One-dimensional angular power spectrum indexed by multipole ``ell``.
+
     Returns
     -------
-    variance : float
-             Variance of the field as predicted by cls.
+    float
+        Variance implied by ``Cl`` using
+        ``sum((2 * ell + 1) * C_ell) / (4 * pi)``.
     """
     Cl = np.asarray(Cl)
     ell = np.arange(len(Cl))
     return np.sum((2*ell + 1) * Cl) / (4*np.pi)
 
 def get_binned_data(x_data, y_data, x_range, n_bins):
-    """
-    Bin x values and compute mean y within each bin
-    
+    """Bin Gaussianized values and average field values in each bin.
+
     Parameters
     ----------
-    x_data : array of Gaussianized x values
-    y_data : array of corresponding y values
-    n_bins : number of bins
-    x_range : tuple (min, max) to keep 
-    
+    x_data : array_like
+        Gaussianized coordinates.
+    y_data : array_like
+        Field values paired with ``x_data``.
+    x_range : tuple
+        Inclusive ``(min, max)`` range of ``x_data`` to keep before binning.
+    n_bins : int
+        Number of bins.
+
     Returns
     -------
-    x_bin_centers : x value at center of each bin
-    y_bin_means : mean y value in each bin
+    x_bin_centers : numpy.ndarray
+        Center of each populated bin.
+    y_bin_means : numpy.ndarray
+        Mean field value in each populated bin.
     """
 
     mask = (x_data >= x_range[0]) & (x_data <= x_range[1])
@@ -68,17 +71,19 @@ def get_binned_data(x_data, y_data, x_range, n_bins):
     return np.array(x_bin_centers), np.array(y_bin_means)
 
 def empirical_cdf(map):
-    """
-    Computes the CDF of a map
-   
+    """Compute the empirical cumulative distribution of a map.
+
     Parameters
     ----------
-    map : array of that represents map
-   
+    map : array_like
+        One-dimensional map values.
+
     Returns
     -------
-    sorted_map : x-coordinates of the CDF
-    cdf_values : y-coordinates of the CDF
+    sorted_map : numpy.ndarray
+        Sorted field values.
+    cdf_values : numpy.ndarray
+        Clipped empirical CDF values in the open interval ``(0, 1)``.
     """
     sorted_map = np.sort(map)
     cdf_values = np.arange(1, len(sorted_map) + 1) / len(sorted_map)
@@ -87,18 +92,28 @@ def empirical_cdf(map):
     return sorted_map, cdf_values
 
 def histogramer2d(map,Nbins,x_range=(-4.5,4.5)):
-    """
-    Given a NL field, computes the black triangles in
-    FIG 1 in 2411.04759
-    
+    """Compute binned Gaussianized map values for transformation fitting.
+
+    The output corresponds to the binned points used to fit the
+    point-transformation relation between a standard-normal variable and the
+    non-Gaussian kappa field.
+
     Parameters
     ----------
-    map : field that we want to model
-    
+    map : array_like
+        One-dimensional field values to model.
+    Nbins : int
+        Number of Gaussianized bins.
+    x_range : tuple, optional
+        Inclusive range of Gaussianized values to keep. The default is
+        ``(-4.5, 4.5)``.
+
     Returns
     -------
-    x_avg : x value of triangle (standard normal)
-    y_avg : y value of triangle (NL field)
+    x_avg : numpy.ndarray
+        Standard-normal bin centers.
+    y_avg : numpy.ndarray
+        Mean field values.
     """
     y_data, cdf  = empirical_cdf(map)
     x_gaussianized = norm.ppf(cdf)
@@ -107,29 +122,37 @@ def histogramer2d(map,Nbins,x_range=(-4.5,4.5)):
 
 
 def fit_gn_with_constraint(x_data, y_data, N, cls, initial_lbda = None):
-    """
-    Fit a Gn transformation to (x, y) data points 
-    in a self-consistent manner by also including
-    the variance as predicted by the power spectrum.
-    
+    """Fit constrained ``G_N`` parameters to Gaussianized field data.
+
+    The fit minimizes squared residuals between the transformation and the
+    binned field values while enforcing the variance implied by the input
+    power spectrum.
+
     Parameters
     ----------
-    x_data : array
-             array of x-values (standard normal)
-    y_data : array 
-             array of y-values (NL field)
-    N : str
-             Which G function to use ('2' and '3' are the 
-             only supported)
-    cls : array
-             The power spectrum of the field.
-    initial_lbda : array
-             Initialization. If None, defaults to ones.
-    
+    x_data : array_like
+        Standard-normal coordinates.
+    y_data : array_like
+        Non-Gaussian field values paired with ``x_data``.
+    N : int
+        Transformation order. The current implementation supports ``2`` and
+        ``3``.
+    cls : array_like
+        One-dimensional angular power spectrum for the field being fit.
+    initial_lbda : array_like, optional
+        Initial parameter values. If omitted, a coarse grid search provides
+        the initialization.
+
     Returns
     -------
-    fitted_lbda : array
-             Best fit parameters.
+    numpy.ndarray
+        Best-fit constrained transformation parameters.
+
+    Raises
+    ------
+    ValueError
+        If the constrained fit is requested for an unsupported
+        transformation order.
     """
     var = variance_from_Cl(cls)
 

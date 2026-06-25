@@ -1,3 +1,5 @@
+"""Public workflow functions for fitting and sampling cosmock maps."""
+
 import numpy as np
 import healpy as hp
 from .structs import NonlinParameters
@@ -7,6 +9,34 @@ from .mocker import get_y_maps, get_kappa_pixwin
 
 
 def fit_parameters(maps, Cl_delta, N):
+    """Fit transformation parameters for a kappa-map data set.
+
+    This is the first step in the standard ``cosmock`` workflow. It fits a
+    ``G_N`` point-transformation model for each tomographic bin and converts
+    the target non-Gaussian kappa spectra into latent Gaussian spectra.
+
+    Parameters
+    ----------
+    maps : numpy.ndarray
+        Dimensionless kappa maps with shape ``(N_bins, N_pix)``.
+    Cl_delta : numpy.ndarray
+        Target non-Gaussian angular power spectra with shape
+        ``(N_bins, N_bins, N_ell)``.
+    N : int
+        Transformation order. The current implementation supports ``2`` and
+        ``3``.
+
+    Returns
+    -------
+    NonlinParameters
+        Fitted nonlinear parameters, latent Gaussian
+        spectra, transformation order, and the original map shape.
+
+    Raises
+    ------
+    AssertionError
+        If ``N`` is not ``2`` or ``3``.
+    """
 
     assert N == 2 or N == 3, f'N={N} is not a supported transformation'
 
@@ -31,6 +61,29 @@ def fit_parameters(maps, Cl_delta, N):
 
 
 def generate_mocks(params, Nmocks, pixwin=None):
+    """Generate mock kappa-map cubes from fitted parameters.
+
+    This is the second step in the standard ``cosmock`` workflow. It samples
+    latent Gaussian HEALPix maps, applies the fitted nonlinear transform, and
+    optionally applies a HEALPix pixel window.
+
+    Parameters
+    ----------
+    params : NonlinParameters
+        Parameters returned by :func:`fit_parameters`.
+    Nmocks : int
+        Number of mock cubes to generate.
+    pixwin : numpy.ndarray, optional
+        HEALPix pixel window values indexed by multipole. If ``None``,
+        ``healpy.pixwin`` is computed for the fitted map resolution.
+
+    Returns
+    -------
+    numpy.ndarray
+        Mock kappa maps with shape
+        ``(Nmocks, N_bins, N_pix)``. Kappa is dimensionless lensing
+        convergence.
+    """
 
     lbda = params.lbda
     N = params.N
