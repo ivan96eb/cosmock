@@ -21,16 +21,22 @@ def test_fit_parameters_Cl():
     path_to_test_Cl = './data/UNBIASED_3point75nsideminus1_Cls_NG_Gower_St_ID_44.npy'
     path_to_test_CL_G_2 = './data/Cl_Gauss_G2.npy'
     path_to_test_CL_G_3 = './data/Cl_Gauss_G3.npy'
+    path_to_fit_params_G2 = './data/fitted_params_G2.npy'
+    path_to_fit_params_G3 = './data/fitted_params_G3.npy'
 
     testmap = np.load(path_to_test_map)
     testCl = np.load(path_to_test_Cl)
     Cl_G2 = np.load(path_to_test_CL_G_2)
     Cl_G3 = np.load(path_to_test_CL_G_3)
+    lbda_G2 = np.load(path_to_fit_params_G2)
+    lbda_G3 = np.load(path_to_fit_params_G3)
 
     N = 2
     params = fit_parameters(testmap, testCl, N)
     params.Cl_Gauss == pytest.approx(Cl_G2)
+    params.lbda == pytest.approx(lbda_G2)
 
     N = 3
     params = fit_parameters(testmap, testCl, N)
     params.Cl_Gauss == pytest.approx(Cl_G3)
+    params.lbda == pytest.approx(lbda_G3)
