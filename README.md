@@ -26,48 +26,7 @@ python -m pip install -e .
 
 ## Quickstart
 
-The repository includes a small example data set under `data/`. The code
-below fits a `G3` transformation to the included kappa map and generates
-one mock map cube.
-
-```python
-import numpy as np
-
-from cosmock import fit_parameters, generate_mocks
-
-path_to_map = "data/Kappa_Gower_St_ID_44_DESy3_tomography_Nside_256.npy"
-path_to_cl = "data/UNBIASED_3point75nsideminus1_Cls_NG_Gower_St_ID_44.npy"
-path_to_pixwin = "data/pixwin_256.npy"
-
-kappa_map = np.load(path_to_map)
-cl_ng = np.load(path_to_cl)
-pixwin = np.load(path_to_pixwin)
-
-order = 3
-n_mocks = 1
-
-params = fit_parameters(kappa_map, cl_ng, order)
-mocks = generate_mocks(params, n_mocks, pixwin=pixwin)
-
-print(mocks.shape)
-```
-
-Expected progress messages:
-
-```text
-Done fitting the G3 parameters
-Done finding the power spectrum of the underlying gaussian random field
-```
-
-Expected output shape:
-
-```text
-(1, N_bins, N_pix)
-```
-
-where `N_bins` is the number of tomographic bins in `kappa_map` and
-`N_pix` is the number of HEALPix pixels per map. For the included data,
-`N_pix` corresponds to `nside=256`.
+The repository includes a small example data set under `data/`. The notebook `Quickstart.ipynb` provides a minimal working example showing how to use this example dataset to run the full pipeline.
 
 ## Public API
 
@@ -98,11 +57,6 @@ Generates mock kappa-map cubes from fitted parameters.
 
 ## Citation
 
-The formal software citation for `cosmock` will be provided by the
-forthcoming software paper. Until then, cite the repository version or
-commit hash used in your analysis so that results can be reproduced.
-
 This package uses ideas from the paper
 [Fast Generation of Weak Lensing Maps with Analytical Point Transformation
-Functions](https://arxiv.org/abs/2411.04759), but that paper is background
-for the method rather than the software citation.
+Functions](https://arxiv.org/abs/2411.04759) as background.
