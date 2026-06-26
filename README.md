@@ -9,19 +9,17 @@ Functions](https://arxiv.org/abs/2411.04759).
 
 The standard user path is:
 
-1. load a tomographic kappa map and its non-Gaussian `C_ell` spectra,
-2. fit the point-transformation parameters with `fit_parameters`,
-3. sample one or more mock kappa-map cubes with `generate_mocks`.
+1. Load a tomographic kappa map and its non-Gaussian `C_ell` spectra,
+2. Fit the point-transformation parameters with `fit_parameters`,
+3. Sample one or more mock kappa maps with `generate_mocks`.
 
 Kappa is dimensionless lensing convergence. The spectra passed to and
 returned by this package are angular power spectra of those fields.
 
 ## Installation
 
-From the repository root, install the package in editable mode:
-
 ```bash
-python -m pip install -e .
+pip install cosmock
 ```
 
 ## Quickstart
@@ -47,10 +45,10 @@ Gaussian field.
 
 ### `generate_mocks(params, Nmocks, pixwin=None)`
 
-Generates mock kappa-map cubes from fitted parameters.
+Generates mock kappa maps from fitted parameters.
 
 - `params`: the object returned by `fit_parameters`.
-- `Nmocks`: number of mock cubes to generate.
+- `Nmocks`: number of mocks to generate.
 - `pixwin`: optional HEALPix pixel window array. If omitted, `healpy`
   computes it from the fitted map resolution.
 - returns: array with shape `(Nmocks, N_bins, N_pix)`.
