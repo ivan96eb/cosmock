@@ -55,6 +55,6 @@ Generates mock kappa maps from fitted parameters.
 
 ## Citation
 
-This package uses ideas from the paper
+This package uses the method from the paper
 [Fast Generation of Weak Lensing Maps with Analytical Point Transformation
 Functions](https://arxiv.org/abs/2411.04759) as background.
